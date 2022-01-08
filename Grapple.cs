@@ -7,15 +7,21 @@ public class Grapple : MonoBehaviour
     public Camera mainCamera;
     public Material lineMaterial;
     private LineRenderer lineRenderer;
-    private Vector2 target;
-    private Vector3 targetPosition;
-    private GameObject targetObject;
+    
     public float speed = 15.0f;
     public float rangeLimit = 10.0f;
 
+    // Vars used for position of line etc
+    private Vector2 HandPosition;
+    private Vector2 target;
+    private GameObject targetObject;
+
+    // Var associated to state
+    private string mode = "pull"; // reach or pull
     private bool hasDirectionTooReach = false;
     private bool hasObjectToPull = false;
-    public string mode = "reach"; // reach or pull
+    private bool isReachingPosition = false;
+
 
     public void Start()
     {
@@ -34,17 +40,14 @@ public class Grapple : MonoBehaviour
         } else if (mode == "pull" && hasObjectToPull)
         {
             PursuePullingObject();
+        } else if (isReachingPosition)
+        {
+            PursueReachingPosition();
         }
 
         if (Input.GetMouseButtonDown(0))
         {
-            if (mode == "reach")
-            {
-                StartReachTarget();
-            } else if (mode == "pull")
-            {
-                StartPullObject();
-            }
+            ReachInputPosition();
         }
 
         if (Input.GetKeyDown(KeyCode.E) == true)
@@ -56,18 +59,57 @@ public class Grapple : MonoBehaviour
         }
     }
 
+    private void ReachInputPosition()
+    {
+        isReachingPosition = true;
+        target = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        HandPosition = transform.position;
+
+        PursueReachingPosition();
+    }
+
+    private void PursueReachingPosition()
+    {
+        if (target != Vector2.zero)
+        {
+            float distanceFromTarget = Vector2.Distance(target, HandPosition);
+
+            if (distanceFromTarget > 0)
+            { 
+                HandPosition = Vector2.MoveTowards(HandPosition, target, speed * Time.deltaTime);
+                DrawLine(HandPosition, transform.position);
+            } else
+            {
+                if (mode == "reach")
+                {
+                    StartReachTarget();
+                }
+                else if (mode == "pull")
+                {
+                    StartPullObject();
+                }
+
+                isReachingPosition = false;
+                lineRenderer.enabled = false;
+            }
+        }
+        else
+        {
+            isReachingPosition = false;
+            lineRenderer.enabled = false;
+        }
+    }
+
     private void StartReachTarget()
     {
         hasDirectionTooReach = false;
-        Vector2 worldPoint = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
+        RaycastHit2D hit = Physics2D.Raycast(HandPosition, Vector2.zero);
 
         // If something was hit, the RaycastHit2D.collider will not be null.
         if (hit.collider != null && hit.collider.tag == "Reachable")
         {
             hasDirectionTooReach = true;
-            targetPosition = Input.mousePosition;
-            target = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            target = HandPosition;
 
             // launch movement to target
             PursueMovementToTarget();
@@ -80,15 +122,14 @@ public class Grapple : MonoBehaviour
 
     private void StartPullObject()
     {
-        Vector2 worldPoint = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
+        hasObjectToPull = false;
+        RaycastHit2D hit = Physics2D.Raycast(HandPosition, Vector2.zero);
 
-        //If something was hit, the RaycastHit2D.collider will not be null.
+        // If something was hit, the RaycastHit2D.collider will not be null.
         if (hit.collider != null && hit.collider.tag == "Pullable")
         {
             hasObjectToPull = true;
             target = Camera.main.ScreenToWorldPoint(hit.collider.gameObject.transform.position);
-            targetPosition = Input.mousePosition;
             targetObject = hit.collider.gameObject;
         }
     }
@@ -102,7 +143,7 @@ public class Grapple : MonoBehaviour
             if (distanceBewteenTarget > 1)
             {
                 transform.position = Vector2.MoveTowards(transform.position, target, speed * Time.deltaTime);
-                DrawLine();
+                DrawLine(target, transform.position);
             }
             else
             {
@@ -126,13 +167,7 @@ public class Grapple : MonoBehaviour
             if (distanceBewteenTarget > 1)
             {
                 targetObject.transform.position = Vector2.MoveTowards(targetObject.transform.position, transform.position, speed * Time.deltaTime);
-                Vector2 currentPosition = transform.position;
-
-                lineRenderer.SetPosition(0, targetObject.transform.position);
-                lineRenderer.SetPosition(1, currentPosition);
-
-                lineRenderer.positionCount = 2;
-                lineRenderer.enabled = true;
+                DrawLine(targetObject.transform.position, transform.position);
             }
             else
             {
@@ -147,21 +182,9 @@ public class Grapple : MonoBehaviour
         }
     }
 
-    private void DrawLine()
+    private void DrawLine(Vector2 target, Vector2 currentPosition)
     {
-        Vector2 targetPosition;
-
-        if (hasDirectionTooReach == true || hasObjectToPull == true)
-        {
-            targetPosition = target;
-        }
-        else
-        {
-            targetPosition = mainCamera.ScreenToWorldPoint(Input.mousePosition);
-        }
-        Vector2 currentPosition = transform.position;
-
-        lineRenderer.SetPosition(0, targetPosition);
+        lineRenderer.SetPosition(0, target);
         lineRenderer.SetPosition(1, currentPosition);
 
         lineRenderer.positionCount = 2;
